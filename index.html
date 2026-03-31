@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Hybrid Athlete Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
+        
+        :root {
+            --apple-black: #000000;
+            --apple-dark-gray: #1c1c1e;
+            --apple-blue: #0a84ff;
+            --apple-green: #30d158;
+            --apple-red: #ff453a;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--apple-black);
+            color: #ffffff;
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: contain;
+        }
+
+        .glass-card {
+            background: rgba(28, 28, 30, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .safe-area-bottom {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        input, select {
+            background: #2c2c2e;
+            border: none;
+            outline: none;
+            color: white;
+            appearance: none;
+        }
+
+        /* Checklist Styles */
+        .checkbox-container {
+            display: block;
+            position: relative;
+            cursor: pointer;
+            user-select: none;
+        }
+        .checkbox-container input {
+            position: absolute;
+            opacity: 0;
+            cursor: pointer;
+            height: 0;
+            width: 0;
+        }
+        .checkmark {
+            height: 24px;
+            width: 24px;
+            background-color: #2c2c2e;
+            border-radius: 6px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .checkbox-container input:checked ~ .checkmark {
+            background-color: var(--apple-green);
+        }
+        .checkmark:after {
+            content: "\f00c";
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            color: white;
+            display: none;
+            font-size: 12px;
+        }
+        .checkbox-container input:checked ~ .checkmark:after {
+            display: block;
+        }
+
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body class="pb-24">
+
+    <!-- App Shell -->
+    <div id="app" class="max-w-md mx-auto min-h-screen px-4 pt-6">
+        
+        <!-- Top Navigation -->
+        <header class="flex justify-between items-center mb-8">
+            <div>
+                <h1 id="current-user-display" class="text-xs font-bold uppercase tracking-widest text-gray-500">Hybrid Athlete</h1>
+                <p id="dashboard-date" class="text-2xl font-extrabold text-white">Today</p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="renderManualLogSelector()" class="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center">
+                    <i class="fas fa-plus text-sm"></i>
+                </button>
+                <button onclick="toggleView('profiles')" class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
+                    <i class="fas fa-user text-sm"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main id="view-container"></main>
+
+        <!-- Bottom Navigation -->
+        <nav class="fixed bottom-0 left-0 right-0 glass-card border-t border-white/10 px-6 py-4 flex justify-between items-center z-50 safe-area-bottom">
+            <button onclick="toggleView('dashboard')" class="nav-btn flex flex-col items-center gap-1 opacity-50 transition-opacity" id="nav-dashboard">
+                <i class="fas fa-bolt text-xl"></i>
+                <span class="text-[10px] font-bold">TODAY</span>
+            </button>
+            <button onclick="toggleView('stats')" class="nav-btn flex flex-col items-center gap-1 opacity-50 transition-opacity" id="nav-stats">
+                <i class="fas fa-chart-bar text-xl"></i>
+                <span class="text-[10px] font-bold">STATS</span>
+            </button>
+            <button onclick="toggleView('history')" class="nav-btn flex flex-col items-center gap-1 opacity-50 transition-opacity" id="nav-history">
+                <i class="fas fa-calendar-alt text-xl"></i>
+                <span class="text-[10px] font-bold">HISTORY</span>
+            </button>
+            <button onclick="toggleView('settings')" class="nav-btn flex flex-col items-center gap-1 opacity-50 transition-opacity" id="nav-settings">
+                <i class="fas fa-cog text-xl"></i>
+                <span class="text-[10px] font-bold">SETTINGS</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Modals Layer -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden items-end justify-center">
+        <div id="modal-content" class="w-full max-w-md bg-[#1c1c1e] rounded-t-3xl p-6 transform translate-y-full transition-transform duration-300 max-h-[90vh] overflow-y-auto no-scrollbar"></div>
+    </div>
+
+    <script>
+        const APP_ID = 'hybrid_athlete_v1';
+        
+        const MON_PROGRESSION_ROUTINES = {
+            'month_1': {
+                title: 'APRIL | Month 1: Foundation',
+                goal: 'Master Scapular pull & Time Under Tension',
+                exercises: [
+                    { name: 'Scapular Pull-ups', target: '2 sets x 8–10 reps', note: '1s squeeze at top' },
+                    { name: 'Negative Pull-ups', target: '3 sets x 5 reps', note: 'Strict 5s lower' },
+                    { name: 'Australian Pull-ups', target: '3 sets x 10 reps', note: 'Bar at chest height' },
+                    { name: 'Hollow Hold', target: '3 sets x 30 sec', note: 'Core tight' },
+                    { name: 'Push Ups', target: '3 sets x 10 reps', note: 'Steady form' },
+                    { name: 'Bodyweight Squats', target: '3 sets x 15 reps', note: 'Keep it steady' },
+                    { name: 'Pike Hold', target: '3 sets x 20 sec', note: 'Shoulder stability' }
+                ]
+            },
+            'month_2': {
+                title: 'MAY | Month 2: Strength Build',
+                goal: 'Increase volume, decrease gravity help',
+                exercises: [
+                    { name: 'Scapular Pull-ups', target: '3 sets x 10 reps', note: '2s hold at top' },
+                    { name: 'Negative Pull-ups', target: '4 sets x 6 reps', note: '6-7s lower' },
+                    { name: 'Australian Pull-ups', target: '3 sets x 12 reps', note: 'Lower bar height' },
+                    { name: 'Hollow Hold', target: '3 sets x 45 sec', note: 'Core strength' },
+                    { name: 'Push Ups', target: '3 sets x 12–15 reps', note: 'Consistency' },
+                    { name: 'Reverse Lunges', target: '3 sets x 10/leg', note: 'Low impact' },
+                    { name: 'Pike Hold', target: '3 sets x 30 sec', note: 'Focus' }
+                ]
+            },
+            'month_3': {
+                title: 'JUNE | Month 3: Peak Phase',
+                goal: 'Transitioning to full Pull-up attempts',
+                exercises: [
+                    { name: 'Dead Hangs', target: '2 sets x Max Time', note: 'Build grip' },
+                    { name: 'Pull-up Attempts', target: '3 sets x Max Reps', note: 'Jump pull-ups if needed' },
+                    { name: 'Negative Pull-ups', target: '3 sets x 3 reps', note: '10s ultra-slow lower' },
+                    { name: 'Australian Pull-ups', target: '3 sets x 8 reps', note: 'Feet elevated' },
+                    { name: 'Hollow Hold', target: '3 sets x 60 sec', note: 'Peak core' },
+                    { name: 'Diamond Push Ups', target: '3 sets x 8–10 reps', note: 'Harder variation' },
+                    { name: 'Pike Hold / Wall Walk', target: '3 sets x 30 sec', note: 'Shoulder peak' }
+                ]
+            }
+        };
+
+        const WED_PROGRESSION_ROUTINES = {
+            'month_1': {
+                title: 'APRIL | Month 1: Foundation',
+                goal: 'Build "Static Strength" and Grip Endurance',
+                exercises: [
+                    { name: 'Dead Hangs', target: '2 sets x Max Time', note: 'Active shoulders' },
+                    { name: 'Scapula Shrugs', target: '3 sets x 10 reps', note: '2s squeeze' },
+                    { name: 'Chin-Over-Bar Hold', target: '3 sets x 5–10 sec', note: 'Jump up and hold' },
+                    { name: 'Negative Pull-Ups', target: '3 sets x 5 reps', note: 'Resist bottom half' },
+                    { name: 'Australian Pull-Ups (Underhand)', target: '3 sets x 10 reps', note: 'Bar at chest height' },
+                    { name: 'Superman Hold', target: '3 sets x 20 sec', note: 'Back chain' },
+                    { name: 'Plank', target: '2 sets x 45 sec', note: 'Core stability' }
+                ]
+            },
+            'month_2': {
+                title: 'MAY | Month 2: Strength Build',
+                goal: 'Increase Time Under Tension (TUT) and Core Stability',
+                exercises: [
+                    { name: 'Dead Hangs', target: '3 sets x Max Time', note: 'Beat last month by 5-10s' },
+                    { name: 'Scapula Shrugs', target: '3 sets x 12 reps', note: '2s slow stretch' },
+                    { name: 'Chin-Over-Bar Hold', target: '3 sets x 15 sec', note: 'Hollow body' },
+                    { name: 'Negative Pull-Ups', target: '3 sets x 6 reps', note: 'Strict 6–7s lower' },
+                    { name: 'Australian Pull-Ups (Underhand)', target: '3 sets x 12 reps', note: 'Lower bar' },
+                    { name: 'Superman Hold', target: '3 sets x 30 sec', note: 'Posterior' },
+                    { name: 'Plank', target: '3 sets x 60 sec', note: 'Full tension' }
+                ]
+            },
+            'month_3': {
+                title: 'JUNE | Month 3: Peak Phase',
+                goal: 'Explosive Pulling and Maximum Control',
+                exercises: [
+                    { name: 'Grip Switches', target: '2 sets x 30 sec', note: 'Over/Under switch' },
+                    { name: 'Jump-to-Hold-to-Negative', target: '3 sets x 4 reps', note: '3s hold, 10s lower' },
+                    { name: 'Scapula Shrugs', target: '3 sets x 15 reps', note: 'Fast up, slow down' },
+                    { name: 'Bar Curls', target: '3 sets x 8–10 reps', note: 'Bicep peak' },
+                    { name: 'Australian Pull-Ups (Mixed)', target: '3 sets x 10 reps', note: 'Switch grip each set' },
+                    { name: 'Superman Hold', target: '3 sets x 45 sec', note: 'Endurance' },
+                    { name: 'Side Planks', target: '2 sets x 45 sec/side', note: 'Running stability' }
+                ]
+            }
+        };
+
+        const DEFAULT_SPLIT = {
+            1: { type: 'progression', name: 'Pull-up Foundation (Mon)', routines: MON_PROGRESSION_ROUTINES },
+            2: { type: 'run', name: 'Interval Run (Cardio)', target: '5km Tempo' },
+            3: { type: 'progression', name: 'Static Strength (Wed)', routines: WED_PROGRESSION_ROUTINES },
+            4: { type: 'run', name: 'Recovery Run (Cardio)', target: '3km Easy' },
+            5: { type: 'calisthenics', name: 'Core & Mobility', exercises: ['Leg Raises', 'Stretching'] },
+            6: { type: 'run', name: 'Endurance Run (Long)', target: '10km+ Long' },
+            0: { type: 'rest', name: 'Active Recovery', target: 'Stretching/Mobility' }
+        };
+
+        const WORKOUT_TYPES = {
+            'progression': { label: 'Progression Routine', icon: 'fa-layer-group' },
+            'run': { label: 'Running / Cardio', icon: 'fa-running' },
+            'calisthenics': { label: 'Calisthenics', icon: 'fa-dumbbell' }
+        };
+
+        let state = {
+            users: [],
+            currentUser: null,
+            currentView: 'dashboard'
+        };
+
+        function init() {
+            loadFromStorage();
+            if (state.users.length === 0) {
+                renderUserCreation();
+            } else {
+                state.currentUser = state.users[0];
+                renderView('dashboard');
+            }
+            updateDateDisplay();
+        }
+
+        function loadFromStorage() {
+            const data = localStorage.getItem(APP_ID);
+            if (data) {
+                state = JSON.parse(data);
+                state.currentView = 'dashboard';
+            }
+        }
+
+        function saveToStorage() {
+            localStorage.setItem(APP_ID, JSON.stringify(state));
+        }
+
+        function updateDateDisplay() {
+            const now = new Date();
+            const options = { weekday: 'long', month: 'short', day: 'numeric' };
+            const el = document.getElementById('dashboard-date');
+            if (el) el.innerText = now.toLocaleDateString(undefined, options);
+            if (state.currentUser) {
+                const userEl = document.getElementById('current-user-display');
+                if (userEl) userEl.innerText = state.currentUser.name;
+            }
+        }
+
+        function toggleView(view) {
+            state.currentView = view;
+            renderView(view);
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.add('opacity-50'));
+            const activeNav = document.getElementById(`nav-${view}`);
+            if (activeNav) activeNav.classList.remove('opacity-50');
+        }
+
+        function renderView(view) {
+            const container = document.getElementById('view-container');
+            if (!container) return;
+            container.innerHTML = '';
+            switch(view) {
+                case 'dashboard': renderDashboard(container); break;
+                case 'profiles': renderProfiles(container); break;
+                case 'stats': renderStats(container); break;
+                case 'history': renderHistory(container); break;
+                case 'settings': renderSettings(container); break;
+            }
+        }
+
+        function renderDashboard(container) {
+            const dayIdx = new Date().getDay();
+            const userSplit = state.currentUser.split || DEFAULT_SPLIT;
+            const workout = userSplit[dayIdx];
+            
+            container.innerHTML = `
+                <div class="space-y-6">
+                    <div class="glass-card p-6 rounded-3xl border-l-4 border-blue-500">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <span class="text-blue-500 font-bold text-xs uppercase tracking-widest">Planned for today</span>
+                                <h2 class="text-2xl font-bold mt-1">${workout.name}</h2>
+                            </div>
+                            <button onclick="editSplit()" class="text-gray-500 hover:text-white p-2">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-4">
+                        ${workout.type === 'rest' ? `
+                            <div class="text-center py-10">
+                                <i class="fas fa-couch text-4xl text-gray-700 mb-4"></i>
+                                <h3 class="text-xl font-bold">Rest Day</h3>
+                                <button onclick="renderManualLogSelector()" class="mt-4 text-blue-400 font-bold">Manual Log Yesterday?</button>
+                            </div>
+                        ` : `
+                            <button onclick="startWorkout()" class="bg-white text-black py-4 rounded-2xl font-extrabold text-lg shadow-xl active:scale-95 transition-transform">
+                                START SESSION
+                            </button>
+                        `}
+                        <button onclick="renderManualLogSelector()" class="bg-[#1c1c1e] text-gray-400 py-4 rounded-2xl font-bold text-sm border border-white/5">
+                            MANUAL LOG / BACKDATE
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function startWorkout() {
+            const dayIdx = new Date().getDay();
+            const userSplit = state.currentUser.split || DEFAULT_SPLIT;
+            const workout = userSplit[dayIdx];
+            
+            if (workout.type === 'progression') {
+                renderProgressionChecklist('month_1', workout.routines);
+            } else if (workout.type === 'run') {
+                renderRunLogger();
+            } else {
+                renderStandardLogger(workout);
+            }
+        }
+
+        // --- Manual Logging Logic ---
+
+        function renderManualLogSelector() {
+            const html = `
+                <h2 class="text-2xl font-bold mb-6">Manual Log</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase">Date</label>
+                        <input type="date" id="manual-date" value="${new Date().toISOString().split('T')[0]}" class="w-full p-4 rounded-xl text-sm font-bold bg-[#2c2c2e]">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase">Workout Type</label>
+                        <select id="manual-type" onchange="toggleManualSubOptions(this.value)" class="w-full p-4 rounded-xl font-bold bg-[#2c2c2e]">
+                            <option value="progression">Progression Routine</option>
+                            <option value="run">Running / Cardio</option>
+                            <option value="calisthenics">General Calisthenics</option>
+                        </select>
+                    </div>
+                    
+                    <div id="progression-options" class="space-y-4">
+                         <div>
+                            <label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase">Specific Routine</label>
+                            <select id="manual-routine-select" class="w-full p-4 rounded-xl font-bold bg-[#2c2c2e]">
+                                <option value="mon">Monday: Pull-up Foundation</option>
+                                <option value="wed">Wednesday: Static Strength</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button onclick="proceedToManualLog()" class="w-full bg-blue-600 py-4 rounded-xl font-bold mt-4 uppercase tracking-widest text-sm">Next Step</button>
+                </div>
+            `;
+            showModal(html);
+        }
+
+        function toggleManualSubOptions(type) {
+            const progOpts = document.getElementById('progression-options');
+            progOpts.classList.toggle('hidden', type !== 'progression');
+        }
+
+        function proceedToManualLog() {
+            const type = document.getElementById('manual-type').value;
+            const date = document.getElementById('manual-date').value;
+            
+            if (type === 'progression') {
+                const routineKey = document.getElementById('manual-routine-select').value;
+                const routines = routineKey === 'mon' ? MON_PROGRESSION_ROUTINES : WED_PROGRESSION_ROUTINES;
+                renderProgressionChecklist('month_1', routines, date);
+            } else if (type === 'run') {
+                renderRunLogger(date);
+            } else if (type === 'calisthenics') {
+                renderStandardLogger({ exercises: ['Push Ups', 'Squats', 'Core'] }, date);
+            }
+        }
+
+        function renderProgressionChecklist(monthKey, routines, manualDate = null) {
+            const routine = routines[monthKey];
+            const dateVal = manualDate || new Date().toISOString().split('T')[0];
+            
+            const html = `
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <h2 class="text-xl font-bold">${routine.title}</h2>
+                        <p class="text-[10px] text-blue-500 font-bold uppercase mt-1">Goal: ${routine.goal}</p>
+                    </div>
+                    <select onchange="handleMonthChange('${monthKey}', this.value, '${dateVal}', ${routines === MON_PROGRESSION_ROUTINES ? "'mon'" : "'wed'"})" class="bg-[#2c2c2e] text-xs p-2 rounded-lg">
+                        <option value="month_1" ${monthKey === 'month_1' ? 'selected' : ''}>Month 1</option>
+                        <option value="month_2" ${monthKey === 'month_2' ? 'selected' : ''}>Month 2</option>
+                        <option value="month_3" ${monthKey === 'month_3' ? 'selected' : ''}>Month 3</option>
+                    </select>
+                </div>
+
+                <div class="mb-6">
+                    <label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase">Workout Date</label>
+                    <input type="date" id="workout-date" value="${dateVal}" class="w-full p-4 rounded-xl text-sm font-bold bg-[#2c2c2e]">
+                </div>
+                
+                <div class="space-y-3 mb-6">
+                    ${routine.exercises.map((ex, i) => `
+                        <div class="glass-card p-4 rounded-2xl flex items-center gap-4">
+                            <label class="checkbox-container">
+                                <input type="checkbox" class="workout-checkbox">
+                                <span class="checkmark"></span>
+                            </label>
+                            <div class="flex-1">
+                                <p class="font-bold text-sm">${ex.name}</p>
+                                <div class="flex justify-between items-end">
+                                    <span class="text-xs text-gray-400">${ex.target}</span>
+                                    <span class="text-[10px] italic text-gray-600">${ex.note}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <button onclick="finishProgression('${monthKey}', '${routine.title}')" class="w-full bg-green-600 py-4 rounded-xl font-bold">Finish & Save</button>
+            `;
+            showModal(html);
+        }
+
+        function handleMonthChange(current, next, date, typeKey) {
+            const routines = typeKey === 'mon' ? MON_PROGRESSION_ROUTINES : WED_PROGRESSION_ROUTINES;
+            renderProgressionChecklist(next, routines, date);
+        }
+
+        function finishProgression(monthKey, title) {
+            const dateInput = document.getElementById('workout-date');
+            const checkedCount = document.querySelectorAll('.workout-checkbox:checked').length;
+            const totalCount = document.querySelectorAll('.workout-checkbox').length;
+            
+            const log = {
+                id: Date.now(),
+                date: new Date(dateInput.value).toISOString(),
+                type: 'progression',
+                month: monthKey,
+                title: title,
+                completed: checkedCount,
+                total: totalCount
+            };
+            
+            state.currentUser.logs.push(log);
+            saveToStorage();
+            hideModal();
+            toggleView('history');
+        }
+
+        function renderRunLogger(manualDate = null) {
+            const dateVal = manualDate || new Date().toISOString().split('T')[0];
+            const html = `
+                <h2 class="text-2xl font-bold mb-6">Log Run</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase">Date</label>
+                        <input type="date" id="run-date" value="${dateVal}" class="w-full p-4 rounded-xl text-sm font-bold bg-[#2c2c2e]">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase">Distance (km)</label>
+                        <input type="number" id="run-dist" step="0.1" class="w-full p-4 rounded-xl text-xl font-bold" placeholder="0.0">
+                    </div>
+                    <div class="flex gap-4">
+                        <div class="flex-1">
+                            <label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase">Time (min)</label>
+                            <input type="number" id="run-time" class="w-full p-4 rounded-xl text-xl font-bold" placeholder="0">
+                        </div>
+                        <div class="flex-1">
+                            <label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase">Avg HR</label>
+                            <input type="number" id="run-hr" class="w-full p-4 rounded-xl text-xl font-bold" placeholder="140">
+                        </div>
+                    </div>
+                    <button onclick="submitRun()" class="w-full bg-blue-600 py-4 rounded-xl font-bold mt-4 uppercase">Save Session</button>
+                </div>
+            `;
+            showModal(html);
+        }
+
+        function submitRun() {
+            const dateInput = document.getElementById('run-date');
+            const dist = parseFloat(document.getElementById('run-dist').value);
+            const time = parseInt(document.getElementById('run-time').value);
+            const hr = parseInt(document.getElementById('run-hr').value);
+            if (!dist || !time) return;
+            const log = { id: Date.now(), date: new Date(dateInput.value).toISOString(), type: 'run', distance: dist, duration: time, hr: hr };
+            state.currentUser.logs.push(log);
+            saveToStorage();
+            hideModal();
+            toggleView('history');
+        }
+
+        function renderStandardLogger(workout, manualDate = null) {
+            const dateVal = manualDate || new Date().toISOString().split('T')[0];
+            const html = `
+                <h2 class="text-2xl font-bold mb-6">Log Session</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase">Date</label>
+                        <input type="date" id="cali-date" value="${dateVal}" class="w-full p-4 rounded-xl text-sm font-bold bg-[#2c2c2e]">
+                    </div>
+                    <select id="cali-name" class="w-full p-4 rounded-xl font-bold bg-[#2c2c2e]">
+                        ${(workout.exercises || ['Workout']).map(ex => `<option value="${ex}">${ex}</option>`).join('')}
+                    </select>
+                    <div class="flex gap-4">
+                        <div class="flex-1">
+                            <label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase">Sets</label>
+                            <input type="number" id="cali-sets" class="w-full p-4 rounded-xl text-xl font-bold" value="3">
+                        </div>
+                        <div class="flex-1">
+                            <label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase">Reps/Set</label>
+                            <input type="number" id="cali-reps" class="w-full p-4 rounded-xl text-xl font-bold" placeholder="0">
+                        </div>
+                    </div>
+                    <button onclick="submitCali()" class="w-full bg-green-600 py-4 rounded-xl font-bold mt-4 uppercase">Log Session</button>
+                </div>
+            `;
+            showModal(html);
+        }
+
+        function submitCali() {
+            const dateInput = document.getElementById('cali-date');
+            const name = document.getElementById('cali-name').value;
+            const sets = parseInt(document.getElementById('cali-sets').value);
+            const reps = parseInt(document.getElementById('cali-reps').value);
+            if (!reps) return;
+            const log = { id: Date.now(), date: new Date(dateInput.value).toISOString(), type: 'calisthenics', exercise: name, sets: sets, reps: reps };
+            state.currentUser.logs.push(log);
+            saveToStorage();
+            hideModal();
+            toggleView('history');
+        }
+
+        // --- Core UI & Navigation ---
+
+        function renderHistory(container) {
+            const logs = [...(state.currentUser.logs || [])].sort((a, b) => new Date(b.date) - new Date(a.date));
+            container.innerHTML = `
+                <div class="space-y-4">
+                    <h2 class="text-xl font-bold">Activity Feed</h2>
+                    ${logs.length === 0 ? '<p class="text-gray-500 text-center py-10">No logs yet.</p>' : ''}
+                    ${logs.map(log => `
+                        <div class="glass-card p-4 rounded-2xl flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-xl flex items-center justify-center ${log.type === 'run' ? 'bg-blue-500/20 text-blue-500' : (log.type === 'progression' ? 'bg-purple-500/20 text-purple-500' : 'bg-green-500/20 text-green-500')}">
+                                <i class="fas ${log.type === 'run' ? 'fa-running' : (log.type === 'progression' ? 'fa-layer-group' : 'fa-dumbbell')} text-xl"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="flex justify-between">
+                                    <span class="font-bold text-sm">${log.type === 'run' ? 'Run' : (log.type === 'progression' ? log.title : log.exercise)}</span>
+                                    <span class="text-[10px] text-gray-500">${new Date(log.date).toLocaleDateString()}</span>
+                                </div>
+                                <p class="text-xs text-gray-400 mt-1">
+                                    ${log.type === 'run' ? `${log.distance}km in ${log.duration}m` : (log.type === 'progression' ? `${log.completed}/${log.total} tasks completed` : `${log.sets} sets · ${log.reps} reps`)}
+                                </p>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function showModal(content) {
+            const box = document.getElementById('modal-content');
+            const overlay = document.getElementById('modal-overlay');
+            box.innerHTML = content;
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+            setTimeout(() => box.classList.remove('translate-y-full'), 10);
+        }
+
+        function hideModal() {
+            const box = document.getElementById('modal-content');
+            const overlay = document.getElementById('modal-overlay');
+            box.classList.add('translate-y-full');
+            setTimeout(() => { overlay.classList.remove('flex'); overlay.classList.add('hidden'); }, 300);
+        }
+
+        function renderProfiles(container) {
+            container.innerHTML = `
+                <div class="space-y-6">
+                    <h2 class="text-xl font-bold">Athletes</h2>
+                    <div class="grid grid-cols-1 gap-3">
+                        ${state.users.map(user => `
+                            <div onclick="selectUser('${user.id}')" class="glass-card p-5 rounded-2xl flex justify-between items-center ${state.currentUser.id === user.id ? 'border-blue-500 ring-1 ring-blue-500' : ''}">
+                                <p class="font-bold">${user.name}</p>
+                                ${state.currentUser.id === user.id ? '<i class="fas fa-check-circle text-blue-500"></i>' : ''}
+                            </div>
+                        `).join('')}
+                        <button onclick="renderUserCreation()" class="border-2 border-dashed border-gray-800 p-5 rounded-2xl text-gray-500 font-bold">+ New Athlete</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderUserCreation() {
+            document.getElementById('view-container').innerHTML = `
+                <div class="pt-10 space-y-8">
+                    <div class="text-center">
+                        <h2 class="text-3xl font-extrabold mb-2">Create Profile</h2>
+                    </div>
+                    <div class="space-y-4">
+                        <input type="text" id="new-user-name" class="w-full p-5 rounded-2xl text-lg font-bold" placeholder="Name">
+                        <input type="number" id="new-user-weight" class="w-full p-5 rounded-2xl text-lg font-bold" placeholder="Weight (kg)">
+                        <button onclick="submitNewUser()" class="w-full bg-blue-600 py-5 rounded-2xl font-black text-xl">CREATE</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function submitNewUser() {
+            const name = document.getElementById('new-user-name').value;
+            const weight = parseFloat(document.getElementById('new-user-weight').value);
+            if (!name || !weight) return;
+            const newUser = { id: 'u_' + Date.now(), name, logs: [], split: JSON.parse(JSON.stringify(DEFAULT_SPLIT)), weightLogs: [{ date: new Date().toISOString(), weight }] };
+            state.users.push(newUser);
+            state.currentUser = newUser;
+            saveToStorage();
+            toggleView('dashboard');
+            updateDateDisplay();
+        }
+
+        function selectUser(id) {
+            state.currentUser = state.users.find(u => u.id === id);
+            saveToStorage();
+            toggleView('dashboard');
+            updateDateDisplay();
+        }
+
+        function renderStats(container) {
+            container.innerHTML = `<div class="glass-card p-6 rounded-3xl"><canvas id="weightChart" height="200"></canvas></div>`;
+            setTimeout(() => {
+                const logs = (state.currentUser.weightLogs || []).sort((a,b) => new Date(a.date) - new Date(b.date));
+                if (logs.length > 0) {
+                    new Chart(document.getElementById('weightChart'), {
+                        type: 'line',
+                        data: {
+                            labels: logs.map(l => new Date(l.date).toLocaleDateString(undefined, {month:'short', day:'numeric'})),
+                            datasets: [{ label: 'Weight', data: logs.map(l => l.weight), borderColor: '#0a84ff', tension: 0.4 }]
+                        },
+                        options: { plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#333' } }, x: { grid: { display: false } } } }
+                    });
+                }
+            }, 50);
+        }
+
+        function renderSettings(container) {
+            container.innerHTML = `<button onclick="resetApp()" class="w-full p-4 text-red-500 font-bold bg-red-500/10 rounded-2xl">Reset Data</button>`;
+        }
+
+        function resetApp() { if(confirm("Reset everything?")) { localStorage.removeItem(APP_ID); location.reload(); } }
+
+        window.addEventListener('load', init);
+        document.getElementById('modal-overlay').addEventListener('click', (e) => { if (e.target.id === 'modal-overlay') hideModal(); });
+    </script>
+</body>
+</html>
